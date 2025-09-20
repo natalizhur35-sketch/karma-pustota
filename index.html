@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Карма и Пустота</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(to right, #f0f4ff, #dfe9ff);
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      text-align: center;
+      padding: 40px 20px;
+      background: #4a90e2;
+      color: white;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 2.5em;
+    }
+    header p {
+      margin-top: 10px;
+      font-size: 1.2em;
+    }
+    main {
+      padding: 20px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background: #f0f4ff;
+    }
+    button {
+      padding: 5px 10px;
+      margin: 2px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .plus { background: #4caf50; color: white; }
+    .minus { background: #f44336; color: white; }
+    .status { font-weight: bold; }
+    #summary, #history { margin-top: 20px; font-size: 1.1em; text-align: center; }
+    .milestone { background: #dfe9ff; font-style: italic; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Карма и Пустота</h1>
+    <p>Трекер ваших действий с подсчетом +1 / -1</p>
+  </header>
+
+  <main>
+    <h2 id="date"></h2>
+    <table id="tracker">
+      <thead>
+        <tr>
+          <th>Время</th>
+          <th>Отметка</th>
+          <th>Действие</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div id="summary"></div>
+    <div id="history"><h3>История:</h3></div>
+  </main>
+
+  <script>
+    const totalSlots = 50;
+    const startTime = {hour: 9, minute: 45};
+    const interval = 15;
+
+    const tbody = document.querySelector('#tracker tbody');
+    const summary = document.getElementById('summary');
+    const historyDiv = document.getElementById('history');
+    const dateEl = document.getElementById('date');
+
+    let history = JSON.parse(localStorage.getItem('trackerHistory') || '{}');
+
+    function todayKey() {
+      const d = new Date();
+      return d.toISOString().slice(0,10);
+    }
+
+    dateEl.textContent = `Дата: ${todayKey()}`;
+
+    if (!history[todayKey()]) {
+      history[todayKey()] = Array(totalSlots).fill({mark: 0});
+    }
+
+    const slots = history[todayKey()].map(s => ({...s}));
+
+    function pad(num) { return num.toString().padStart(2,'0'); }
+
+    function generateTimes() {
+      const times = [];
+      let h = startTime.hour;
+      let m = startTime.minute;
+      for (let i = 0; i < totalSlots; i++) {
+        times.push(`${pad(h)}:${pad(m)}`);
+        m += interval;
+        if (m >= 60) { m -= 60; h += 1; }
+      }
+      return times;
+    }
+
+    const times = generateTimes();
+
+    function render() {
+      tbody.innerHTML = '';
+      slots.forEach((slot, i) => {
+        const tr = document.createElement('tr');
+        const tdTime = document.createElement('td');
+        tdTime.textContent = times[i];
+
+        const tdMark = document.createElement('td');
+        tdMark.className = 'status';
+        tdMark.textContent = slot.mark;
+
+        const tdActions = document.createElement('td');
+        const btnPlus = document.createElement('button');
+        btnPlus.textContent = 'Вспомнила';
+        btnPlus.className = 'plus';
+        btnPlus.onclick = () => updateMark(i, 1);
+
+        const btnMinus = document.createElement('button');
+        btnMinus.textContent = 'Не вспомнила';
+        btnMinus.className = 'minus';
+        btnMinus.onclick = () => updateMark(i, -1);
+
+        tdActions.appendChild(btnPlus);
+        tdActions.appendChild(btnMinus);
+
+        tr.appendChild(tdTime);
+        tr.appendChild(tdMark);
+        tr.appendChild(tdActions);
+
+        tbody.appendChild(tr);
+
+        // Каждые 2 часа строка «Осталось до цели»
+        const [hour, minute] = times[i].split(':').map(Number);
+        if ((hour - startTime.hour) % 2 === 0 && minute === startTime.minute && hour !== startTime.hour) {
+          const milestone = document.createElement('tr');
+          milestone.className = 'milestone';
+          const tdMilestone = document.createElement('td');
+          tdMilestone.colSpan = 3;
+          tdMilestone.textContent = `⏳ Осталось до цели: ${countLeft()} действий`;
+          milestone.appendChild(tdMilestone);
+          tbody.appendChild(milestone);
+        }
+      });
+      updateSummary();
+      renderHistory();
+    }
+
+    function updateMark(index, value) {
+      slots[index].mark += value;
+      history[todayKey()] = slots;
+      localStorage.setItem('trackerHistory', JSON.stringify(history));
+      render();
+    }
+
+    function countLeft() {
+      const plus = slots.filter(s => s.mark > 0).length;
+      const minus = slots.filter(s => s.mark < 0).length;
+      return totalSlots - plus - minus;
+    }
+
+    function updateSummary() {
+      const plus = slots.filter(s => s.mark > 0).length;
+      const minus = slots.filter(s => s.mark < 0).length;
+      const left = totalSlots - plus - minus;
+      summary.textContent = `Сегодня → +1: ${plus} | -1: ${minus} | Осталось: ${left}`;
+    }
+
+    function renderHistory() {
+      const histKeys = Object.keys(history).sort((a,b) => b.localeCompare(a));
+      let html = '<h3>История:</h3>';
+      histKeys.forEach(key => {
+        const dayData = history[key];
+        const plus = dayData.filter(s => s.mark > 0).length;
+        const minus = dayData.filter(s => s.mark < 0).length;
+        html += `<p>${key}: +1: ${plus} | -1: ${minus}</p>`;
+      });
+      historyDiv.innerHTML = html;
+    }
+
+    render();
+  </script>
+
+</body>
+</html>
